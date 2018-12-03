@@ -95,6 +95,7 @@ static struct db_keys *crk_guesses;
 static uint64_t *crk_timestamps;
 static char crk_stdout_key[PLAINTEXT_BUFFER_SIZE];
 int64_t crk_pot_pos;
+static int kpc_warn;
 
 /* expose max_keys_per_crypt to the world (needed in recovery.c) */
 int crk_max_keys_per_crypt(void)
@@ -218,6 +219,8 @@ void crk_init(struct db_main *db, void (*fix_state)(void),
 	crk_help();
 
 	idle_init(db->format);
+
+	kpc_warn = options.verbosity >= VERB_DEFAULT ? CRK_KPC_WARN : 0;
 }
 
 /*
@@ -817,6 +820,19 @@ static int crk_password_loop(struct db_salt *salt)
 
 	if (fp_fix_state)
 		fp_fix_state();
+
+	if (kpc_warn && crk_key_index < crk_params->min_keys_per_crypt) {
+		static int last_warn_kpc;
+
+		if (!mask_increments_len && last_warn_kpc != crk_key_index) {
+			last_warn_kpc = crk_key_index;
+			fprintf(stderr,"Warning: %u: Only %d candidates left, minimum %d "
+			        "needed for performance.\n%s",
+			        NODE, crk_key_index, crk_params->min_keys_per_crypt,
+			        --kpc_warn ?
+			        "" : "Further messages of this type will be suppressed.\n");
+		}
+	}
 
 	count = crk_key_index;
 	match = crk_methods.crypt_all(&count, salt);
